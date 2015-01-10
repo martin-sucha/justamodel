@@ -84,7 +84,7 @@ class Model(metaclass=ModelMeta):
             try:
                 field.validate(getattr(self, name))
             except ValidationError as field_error:
-                error.add_field_error(name, field_error)
+                error.add_sub_error(name, field_error)
         if error:
             raise error
 

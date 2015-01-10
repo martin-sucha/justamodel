@@ -162,8 +162,8 @@ class TestModel(TestCase):
         type_mock_a.validate.assert_called_once_with(5)
         type_mock_b.validate.assert_called_once_with(10)
 
-        self.assertEqual(e.exception.field_errors['a'].errors, [error_a])
-        self.assertEqual(e.exception.field_errors['b'].errors, [error_b])
+        self.assertEqual(e.exception.sub_errors['a'].errors, [error_a])
+        self.assertEqual(e.exception.sub_errors['b'].errors, [error_b])
 
 
 class TestPolymorphicModel(TestCase):
