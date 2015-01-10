@@ -11,6 +11,7 @@ class Field:
         self.required = required
         self.default = default
         self.type = type
+        self.extra_attributes = list(kwargs.keys())
         for name, value in kwargs.items():
             setattr(self, name, value)
 
@@ -30,6 +31,14 @@ class Field:
                 raise ValidationError('value is required')
         else:
             self.type.validate(value)
+
+    def __repr__(self):
+        if self.default is type_default:
+            default = 'type_default'
+        else:
+            default = repr(self.default)
+        extra = ''.join(', {}={!r}'.format(key, getattr(self, key, None)) for key in self.extra_attributes)
+        return 'Field({!r}, required={!r}, default={}{})'.format(self.type, self.required, default, extra)
 
 
 class ModelMeta(type):

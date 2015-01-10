@@ -11,6 +11,17 @@ class TestField(TestCase):
         field = Field(MagicMock(), custom='hello')
         self.assertEqual('hello', field.custom)
 
+    def test_repr(self):
+        field_type = MagicMock()
+        field_type.__repr__ = MagicMock()
+        field_type.__repr__.return_value = 'MockType'
+
+        field = Field(field_type, custom='hello')
+        self.assertEqual('Field(MockType, required=True, default=type_default, custom=\'hello\')', repr(field))
+
+        field = Field(field_type, custom='hello', default='abc', required=False)
+        self.assertEqual('Field(MockType, required=False, default=\'abc\', custom=\'hello\')', repr(field))
+
     def test_creates_default_value_from_type(self):
         mock_type = MagicMock()
         mock_type.default_value = 10

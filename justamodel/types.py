@@ -29,6 +29,9 @@ class ValueType:
     def default_value(self):
         return self.native_type()
 
+    def __repr__(self):  # pragma: no cover
+        return '{}(validators={!r})'.format(type(self).__qualname__, self.validators)
+
 
 class BooleanType(ValueType):
     @property
