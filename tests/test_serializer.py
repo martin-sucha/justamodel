@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from unittest import TestCase
 import unittest
 from justamodel.exceptions import ValidationError
@@ -77,6 +78,16 @@ class TestDictSerialization(TestCase):
             'int_field': 46,
             'url_field': 'http://abc'
         }
+        self.assertEqual(expected, serialized)
+
+    def test_serialization_ordered(self):
+        serializer = DictModelSerializer(VerbatimFieldSerializer(), mapping_type=OrderedDict)
+        serialized = serializer.serialize_model(TestModel(string_field='a string', int_field=46, url_field='http://abc'))
+        expected = OrderedDict((
+            ('string_field', 'a string'),
+            ('int_field', 46),
+            ('url_field', 'http://abc'),
+        ))
         self.assertEqual(expected, serialized)
 
     def test_serialization_invalid(self):

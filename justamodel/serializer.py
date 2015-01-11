@@ -2,6 +2,7 @@
 from abc import ABCMeta, abstractmethod
 import json
 import collections
+from collections.abc import Mapping
 from .exceptions import ValidationError, ModelValidationError
 from .model import get_type_specifier_name, get_model_class_for_type, get_type_name_for_model, Model
 from .types import ModelType, StringType, BooleanType, IntType
@@ -77,13 +78,17 @@ class ModelSerializer(metaclass=ABCMeta):
 
 
 class DictModelSerializer(ModelSerializer):
+    def __init__(self, field_serializer, mapping_type=dict):
+        super().__init__(field_serializer)
+        self.mapping_type = mapping_type
+
     def _serialize_model(self, value, model_type, **kwargs):
         if value is None:
             return None
 
         model_class = type(value)
 
-        result = {}
+        result = self.mapping_type()
         for name, field in self._iter_model_fields(model_class, **kwargs):
             if isinstance(field.type, ModelType):
                 result[name] = self._serialize_model(getattr(value, name), model_class, **kwargs)
@@ -102,8 +107,8 @@ class DictModelSerializer(ModelSerializer):
         if value is None:
             return None
 
-        if not isinstance(value, dict):
-            raise ValidationError('Model deserialization requires dictionary type')
+        if not isinstance(value, Mapping):
+            raise ValidationError('Model deserialization requires mapping type')
 
         if isinstance(model_or_model_type, Model):
             model = model_or_model_type
