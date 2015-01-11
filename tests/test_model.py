@@ -17,7 +17,7 @@ class TestField(TestCase):
         field_type.__repr__.return_value = 'MockType'
 
         field = Field(field_type, custom='hello')
-        self.assertEqual('Field(MockType, required=True, default=type_default, custom=\'hello\')', repr(field))
+        self.assertEqual('Field(MockType, required=True, default=TYPE_DEFAULT, custom=\'hello\')', repr(field))
 
         field = Field(field_type, custom='hello', default='abc', required=False)
         self.assertEqual('Field(MockType, required=False, default=\'abc\', custom=\'hello\')', repr(field))

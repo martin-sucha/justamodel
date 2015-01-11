@@ -3,11 +3,23 @@ from collections import OrderedDict
 from .exceptions import ValidationError, ModelValidationError
 from abc import ABCMeta
 
-type_default = object()
+
+class _SpecialConstant:  # pragma: no cover
+    def __init__(self, name):
+        self.name = name
+
+    def __repr__(self):
+        return self.name
+
+    def __str__(self):
+        return self.name
+
+
+TYPE_DEFAULT = _SpecialConstant('TYPE_DEFAULT')
 
 
 class Field:
-    def __init__(self, type, required=True, default=type_default, **kwargs):
+    def __init__(self, type, required=True, default=TYPE_DEFAULT, **kwargs):
         self.required = required
         self.default = default
         self.type = type
@@ -16,7 +28,7 @@ class Field:
             setattr(self, name, value)
 
     def create_default_value(self):
-        if self.default is type_default:
+        if self.default is TYPE_DEFAULT:
             if not self.required:
                 return None
             return self.type.default_value
@@ -33,12 +45,8 @@ class Field:
             self.type.validate(value)
 
     def __repr__(self):
-        if self.default is type_default:
-            default = 'type_default'
-        else:
-            default = repr(self.default)
         extra = ''.join(', {}={!r}'.format(key, getattr(self, key, None)) for key in self.extra_attributes)
-        return 'Field({!r}, required={!r}, default={}{})'.format(self.type, self.required, default, extra)
+        return 'Field({!r}, required={!r}, default={!r}{})'.format(self.type, self.required, self.default, extra)
 
 
 class ModelMeta(type):
