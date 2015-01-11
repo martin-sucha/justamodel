@@ -5,7 +5,7 @@ from importlib import import_module
 from urllib.parse import urlparse
 import re
 import builtins
-from .exceptions import ValidationError
+from .exceptions import ValidationError, ModelValidationError
 
 
 class ValueType:
@@ -122,8 +122,14 @@ class IterableType(SizedType):
     def validate(self, value):
         super().validate(value)
         if self.item_type is not None:
-            for item in value:
-                self.item_type.validate(item)
+            error = ModelValidationError()
+            for key, item in enumerate(value):
+                try:
+                    self.item_type.validate(item)
+                except ValidationError as e:
+                    error.add_sub_error(key, e)
+            if error:
+                raise error
 
 
 class ListType(IterableType):
@@ -132,10 +138,26 @@ class ListType(IterableType):
         return list
 
 
-class SetType(IterableType):
+class SetType(SizedType):
+    def __init__(self, item_type=None, **kwargs):
+        super().__init__(**kwargs)
+        self.item_type = item_type
+
     @property
     def native_type(self):
         return set
+
+    def validate(self, value):
+        super().validate(value)
+        if self.item_type is not None:
+            error = ModelValidationError()
+            for item_key in value:
+                try:
+                    self.item_type.validate(item_key)
+                except ValidationError as e:
+                    error.add_sub_error(item_key, e)
+            if error:
+                raise error
 
 
 class DictType(SizedType):
@@ -151,11 +173,26 @@ class DictType(SizedType):
     def validate(self, value):
         super().validate(value)
         if self.key_type is not None or self.value_type is not None:
+            error = ModelValidationError()
             for item_key, item_value in value.items():
+                sub_error = ModelValidationError()
+
                 if self.key_type is not None:
-                    self.key_type.validate(item_key)
+                    try:
+                        self.key_type.validate(item_key)
+                    except ValidationError as e:
+                        sub_error.add_sub_error('key', e)
+
                 if self.value_type is not None:
-                    self.value_type.validate(item_value)
+                    try:
+                        self.value_type.validate(item_value)
+                    except ValidationError as e:
+                        sub_error.add_sub_error('value', e)
+
+                if sub_error:
+                    error.add_sub_error(item_key, sub_error)
+            if error:
+                raise error
 
 
 def import_object(fully_qualified_name):

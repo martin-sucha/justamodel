@@ -3,7 +3,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock
 import re
 from datetime import date, datetime, time
-from justamodel.exceptions import ValidationError
+from justamodel.exceptions import ValidationError, ModelValidationError
 from justamodel.model import Model
 from justamodel.types import ValueType, BooleanType, SizedType, ComparableType, StringType, UrlType, IntType, \
     DictType, ListType, ModelType, import_object, DateType, TimeType, DateTimeType, SetType
@@ -233,6 +233,21 @@ class TestListType(TestCase):
         list_type.validate(['a'])
         mock_type.validate.assert_called_once_with('a')
 
+        mock_type = MagicMock()
+        err = ValidationError('Not \'a\'')
+
+        def validator(value):
+            if value != 'a':
+                raise err
+
+        mock_type.validate.side_effect = validator
+
+        list_type = ListType(item_type=mock_type)
+        list_type.validate([])
+        with self.assertRaises(ModelValidationError) as mve:
+            list_type.validate(['a', 'b'])
+        self.assertEqual(mve.exception.sub_errors[1].errors[0], err)
+
     def test_validates_min_length(self):
         list_type = ListType(min_length=2)
         with self.assertRaises(ValidationError):
@@ -274,6 +289,21 @@ class TestSetType(TestCase):
         set_type.validate({'a'})
         mock_type.validate.assert_called_once_with('a')
 
+        mock_type = MagicMock()
+        err = ValidationError('Not \'a\'')
+
+        def validator(value):
+            if value != 'a':
+                raise err
+
+        mock_type.validate.side_effect = validator
+
+        set_type = SetType(item_type=mock_type)
+        set_type.validate(set())
+        with self.assertRaises(ModelValidationError) as mve:
+            set_type.validate({'a', 'b'})
+        self.assertEqual(mve.exception.sub_errors['b'].errors[0], err)
+
     def test_validates_min_length(self):
         set_type = SetType(min_length=2)
         with self.assertRaises(ValidationError):
@@ -311,12 +341,42 @@ class TestDictType(TestCase):
         dict_type.validate({'a': 'b'})
         mock_type.validate.assert_called_once_with('a')
 
+        mock_type = MagicMock()
+        err = ValidationError('Not \'a\'')
+
+        def validator(value):
+            if value != 'a':
+                raise err
+
+        mock_type.validate.side_effect = validator
+
+        dict_type = DictType(key_type=mock_type)
+        dict_type.validate(dict())
+        with self.assertRaises(ModelValidationError) as mve:
+            dict_type.validate({'a': 'c', 'b': 'd'})
+        self.assertEqual(mve.exception.sub_errors['b'].sub_errors['key'].errors[0], err)
+
     def test_validates_value_type(self):
         mock_type = MagicMock()
         dict_type = DictType(value_type=mock_type)
         dict_type.validate({})
         dict_type.validate({'a': 'b'})
         mock_type.validate.assert_called_once_with('b')
+
+        mock_type = MagicMock()
+        err = ValidationError('Not \'a\'')
+
+        def validator(value):
+            if value != 'a':
+                raise err
+
+        mock_type.validate.side_effect = validator
+
+        dict_type = DictType(value_type=mock_type)
+        dict_type.validate(dict())
+        with self.assertRaises(ModelValidationError) as mve:
+            dict_type.validate({'a': 'c', 'b': 'a'})
+        self.assertEqual(mve.exception.sub_errors['a'].sub_errors['value'].errors[0], err)
 
 
 class TestModelType(TestCase):
