@@ -124,13 +124,21 @@ class DictModelSerializer(ModelSerializer):
             model_class = get_model_class_for_type(model_or_model_type, type_name)
             model = model_class()
 
+        error = ModelValidationError()
         for name, field in self._iter_model_fields(model_class, **kwargs):
-            if isinstance(field.type, ModelType):
-                deserialized_value = self._deserialize_model(value.get(name), field.type.native_type, **kwargs)
+            try:
+                if isinstance(field.type, ModelType):
+                    deserialized_value = self._deserialize_model(value.get(name), field.type.native_type, **kwargs)
+                else:
+                    deserialized_value = self.field_serializer.deserialize_field(value.get(name), model_class, name,
+                                                                                 field, **kwargs)
+            except ValidationError as field_error:
+                error.add_sub_error(name, field_error)
             else:
-                deserialized_value = self.field_serializer.deserialize_field(value.get(name), model_class, name, field,
-                                                                             **kwargs)
-            setattr(model, name, deserialized_value)
+                setattr(model, name, deserialized_value)
+
+        if error:
+            raise error
 
         return model
 

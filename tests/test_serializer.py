@@ -1,10 +1,10 @@
 from collections import OrderedDict
 from unittest import TestCase
 import unittest
-from justamodel.exceptions import ValidationError
+from justamodel.exceptions import ValidationError, ModelValidationError
 from justamodel.model import Model, Field, PolymorphicModel
 from justamodel.serializer import DictModelSerializer, VerbatimFieldSerializer, JsonModelSerializer, make_field_filter, \
-    iter_model_fields
+    iter_model_fields, FieldSerializer
 from justamodel.types import StringType, IntType, UrlType, ModelType
 
 
@@ -200,6 +200,35 @@ class TestDictSerialization(TestCase):
         deserialized = self.serializer.deserialize_model(serialized, TestComposedModel2)
         expected = TestComposedModel2(name='test', submodel=None)
         self.assertEqual(expected, deserialized)
+
+    def test_deserialization_validation_errors(self):
+        serialized = {
+            'string_field': 'aa',
+            'int_field': 10,
+            'url_field': 'abc'
+        }
+
+        err = {
+            'string_field': ValidationError('Test string_field'),
+            'int_field': ValidationError('Test int_field')
+        }
+
+        class MockSerializer(FieldSerializer):
+            def serialize_field(self, value, model_type, field_name, field, **kwargs):
+                pass
+
+            def deserialize_field(self, value, model_type, field_name, field, **kwargs):
+                if field_name in err:
+                    raise err[field_name]
+                return value
+
+        serializer = DictModelSerializer(MockSerializer())
+        with self.assertRaises(ModelValidationError) as error:
+            serializer.deserialize_model(serialized, TestModel)
+        self.assertEqual(error.exception.sub_errors['string_field'].errors, [err['string_field']])
+        self.assertEqual(error.exception.sub_errors['int_field'].errors, [err['int_field']])
+        self.assertNotIn('url_field', error.exception.sub_errors)
+
 
 
 class TestSerializationJson(TestCase):
