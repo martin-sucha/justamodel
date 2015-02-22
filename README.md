@@ -58,9 +58,9 @@ bowl.validate()  # justamodel.exceptions.ModelValidationError
 
 ```python
 bowl.location='kitchen'
-from justamodel.serializer import DictModelSerializer, VerbatimFieldSerializer
+from justamodel.serializer import DictModelSerializer
 
-serializer = DictModelSerializer(VerbatimFieldSerializer)
+serializer = DictModelSerializer()
 data = serializer.serializer_model(bowl)
 # {'contents': [Fruit(name='apple', colour='red', pieces=3), Fruit(name='banana', colour=None, pieces=1)], 'location': 'kitchen'}
 

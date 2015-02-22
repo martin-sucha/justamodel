@@ -5,25 +5,7 @@ import collections
 from collections.abc import Mapping
 from .exceptions import ValidationError, ModelValidationError
 from .model import get_type_specifier_name, get_model_class_for_type, get_type_name_for_model, Model
-from .types import ModelType, StringType, BooleanType, IntType
-
-
-class FieldSerializer():
-    @abstractmethod
-    def serialize_field(self, value, model_type, field_name, field, **kwargs):
-        raise TypeError('Don\'t know how to serialize {}'.format(field.type))  # pragma: no cover
-
-    @abstractmethod
-    def deserialize_field(self, value, model_type, field_name, field, **kwargs):
-        raise TypeError('Don\'t know how to deserialize {}'.format(field.type))  # pragma: no cover
-
-
-class VerbatimFieldSerializer(FieldSerializer):
-    def serialize_field(self, value, model_type, field_name, field, **kwargs):
-        return value
-
-    def deserialize_field(self, value, model_type, field_name, field, **kwargs):
-        return value
+from .types import ModelType, StringType, BooleanType, IntType, ListType, SetType, DictType
 
 
 def make_field_filter(fields):
@@ -44,8 +26,8 @@ def iter_model_fields(model_class, fields=None, **kwargs):
 
 
 class ModelSerializer(metaclass=ABCMeta):
-    def __init__(self, field_serializer):
-        self.field_serializer = field_serializer
+    def __init__(self):
+        pass
 
     def _iter_model_fields(self, model_class, **kwargs):
         return iter_model_fields(model_class, **kwargs)
@@ -76,10 +58,34 @@ class ModelSerializer(metaclass=ABCMeta):
             mve.add_error(e)
             raise mve
 
+    def serialize_value(self, value, value_type, field=None, **kwargs):
+        if isinstance(value_type, ModelType):
+            return self._serialize_model(value, value_type.native_type, **kwargs)
+        elif isinstance(value_type, ListType) and value is not None:
+            return [self.serialize_value(x, value_type.item_type) for x in value]
+        elif isinstance(value_type, SetType) and value is not None:
+            return set([self.serialize_value(x, value_type.item_type) for x in value])
+        elif isinstance(value_type, DictType) and value is not None:
+            return {self.serialize_value(k, value_type.key_type): self.serialize_value(v, value_type.value_type)
+                    for k, v in value.items()}
+        return value
+
+    def deserialize_value(self, value, value_type, field=None, **kwargs):
+        if isinstance(value_type, ModelType):
+            return self._deserialize_model(value, value_type.native_type, **kwargs)
+        elif isinstance(value_type, ListType) and value is not None:
+            return [self.deserialize_value(x, value_type.item_type) for x in value]
+        elif isinstance(value_type, SetType) and value is not None:
+            return set([self.deserialize_value(x, value_type.item_type) for x in value])
+        elif isinstance(value_type, DictType) and value is not None:
+            return {self.deserialize_value(k, value_type.key_type): self.deserialize_value(v, value_type.value_type)
+                    for k, v in value.items()}
+        return value
+
 
 class DictModelSerializer(ModelSerializer):
-    def __init__(self, field_serializer, mapping_type=dict):
-        super().__init__(field_serializer)
+    def __init__(self, mapping_type=dict):
+        super().__init__()
         self.mapping_type = mapping_type
 
     def _serialize_model(self, value, model_type, **kwargs):
@@ -90,11 +96,7 @@ class DictModelSerializer(ModelSerializer):
 
         result = self.mapping_type()
         for name, field in self._iter_model_fields(model_class, **kwargs):
-            if isinstance(field.type, ModelType):
-                result[name] = self._serialize_model(getattr(value, name), model_class, **kwargs)
-            else:
-                result[name] = self.field_serializer.serialize_field(getattr(value, name), model_class, name, field,
-                                                                     **kwargs)
+            result[name] = self.serialize_value(getattr(value, name), field.type, field=field, **kwargs)
 
         type_specifier_name = get_type_specifier_name(model_type)
         if type_specifier_name:
@@ -127,11 +129,7 @@ class DictModelSerializer(ModelSerializer):
         error = ModelValidationError()
         for name, field in self._iter_model_fields(model_class, **kwargs):
             try:
-                if isinstance(field.type, ModelType):
-                    deserialized_value = self._deserialize_model(value.get(name), field.type.native_type, **kwargs)
-                else:
-                    deserialized_value = self.field_serializer.deserialize_field(value.get(name), model_class, name,
-                                                                                 field, **kwargs)
+                deserialized_value = self.deserialize_value(value.get(name), field.type, field=field, **kwargs)
             except ValidationError as field_error:
                 error.add_sub_error(name, field_error)
             else:
@@ -144,8 +142,8 @@ class DictModelSerializer(ModelSerializer):
 
 
 class JsonModelSerializer(DictModelSerializer):
-    def __init__(self, field_serializer, sort_keys=False):
-        super().__init__(field_serializer)
+    def __init__(self, sort_keys=False):
+        super().__init__()
         self.sort_keys = sort_keys
 
     def serialize_model(self, value, model_type=None, **kwargs):

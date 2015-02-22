@@ -3,9 +3,9 @@ from unittest import TestCase
 import unittest
 from justamodel.exceptions import ValidationError, ModelValidationError
 from justamodel.model import Model, Field, PolymorphicModel
-from justamodel.serializer import DictModelSerializer, VerbatimFieldSerializer, JsonModelSerializer, make_field_filter, \
-    iter_model_fields, FieldSerializer
-from justamodel.types import StringType, IntType, UrlType, ModelType
+from justamodel.serializer import DictModelSerializer, JsonModelSerializer, make_field_filter, \
+    iter_model_fields
+from justamodel.types import StringType, IntType, UrlType, ModelType, ListType, SetType, DictType
 
 
 class TestModel(Model):
@@ -41,13 +41,28 @@ class TestComposedModel2(Model):
     submodel = Field(ModelType(TestModelA), required=False)
 
 
+class TestComposedModel3(Model):
+    name = Field(StringType())
+    submodels = Field(ListType(ModelType(TestModelA)))
+
+
+class TestComposedModel4(Model):
+    name = Field(StringType())
+    submodels = Field(SetType(StringType()))
+
+
+class TestComposedModel5(Model):
+    name = Field(StringType())
+    submodels = Field(DictType(StringType(), ModelType(TestModelA)))
+
+
 class TestInheritedModel(TestModel):
     another_field = Field(StringType())
 
 
 class TestDictSerialization(TestCase):
     def setUp(self):
-        self.serializer = DictModelSerializer(VerbatimFieldSerializer())
+        self.serializer = DictModelSerializer()
 
     def test_deserialization(self):
         deserialized = self.serializer.deserialize_model({
@@ -81,7 +96,7 @@ class TestDictSerialization(TestCase):
         self.assertEqual(expected, serialized)
 
     def test_serialization_ordered(self):
-        serializer = DictModelSerializer(VerbatimFieldSerializer(), mapping_type=OrderedDict)
+        serializer = DictModelSerializer(mapping_type=OrderedDict)
         serialized = serializer.serialize_model(TestModel(string_field='a string', int_field=46, url_field='http://abc'))
         expected = OrderedDict((
             ('string_field', 'a string'),
@@ -201,6 +216,89 @@ class TestDictSerialization(TestCase):
         expected = TestComposedModel2(name='test', submodel=None)
         self.assertEqual(expected, deserialized)
 
+    def test_serialization_composed_list(self):
+        model = TestComposedModel3(name='test',
+                                   submodels=[TestModelA(a_field='abc', x=10), TestModelA(a_field='def', x=20)])
+        serialized = self.serializer.serialize_model(model)
+        expected = {
+            'name': 'test',
+            'submodels': [{
+                'a_field': 'abc',
+                'x': 10
+            }, {
+                'a_field': 'def',
+                'x': 20
+            }]
+        }
+        self.assertEqual(expected, serialized)
+
+    def test_deserialization_composed_list(self):
+        serialized = {
+            'name': 'test',
+            'submodels': [{
+                'a_field': 'abc',
+                'x': 10
+            }, {
+                'a_field': 'def',
+                'x': 20
+            }]
+        }
+        deserialized = self.serializer.deserialize_model(serialized, TestComposedModel3)
+        expected = TestComposedModel3(name='test',
+                                      submodels=[TestModelA(a_field='abc', x=10), TestModelA(a_field='def', x=20)])
+        self.assertEqual(expected, deserialized)
+
+    def test_serialization_composed_set(self):
+        model = TestComposedModel4(name='test', submodels={'abc', 'def'})
+        serialized = self.serializer.serialize_model(model)
+        expected = {
+            'name': 'test',
+            'submodels': {'abc', 'def'}
+        }
+        self.assertEqual(expected, serialized)
+
+    def test_deserialization_composed_set(self):
+        serialized = {
+            'name': 'test',
+            'submodels': {'abc', 'def'}
+        }
+        deserialized = self.serializer.deserialize_model(serialized, TestComposedModel4)
+        expected = TestComposedModel4(name='test', submodels={'abc', 'def'})
+        self.assertEqual(expected, deserialized)
+
+    def test_serialization_composed_dict(self):
+        model = TestComposedModel5(name='test',
+                                   submodels={'a': TestModelA(a_field='abc', x=10), 'b': TestModelA(a_field='def', x=20)})
+        serialized = self.serializer.serialize_model(model)
+        expected = {
+            'name': 'test',
+            'submodels': {'a': {
+                'a_field': 'abc',
+                'x': 10
+            }, 'b': {
+                'a_field': 'def',
+                'x': 20
+            }}
+        }
+        self.assertEqual(expected, serialized)
+
+    def test_deserialization_composed_dict(self):
+        serialized = {
+            'name': 'test',
+            'submodels': {'a': {
+                'a_field': 'abc',
+                'x': 10
+            }, 'b': {
+                'a_field': 'def',
+                'x': 20
+            }}
+        }
+        deserialized = self.serializer.deserialize_model(serialized, TestComposedModel5)
+        expected = TestComposedModel5(name='test',
+                                      submodels={'a': TestModelA(a_field='abc', x=10),
+                                                 'b': TestModelA(a_field='def', x=20)})
+        self.assertEqual(expected, deserialized)
+
     def test_deserialization_validation_errors(self):
         serialized = {
             'string_field': 'aa',
@@ -213,16 +311,16 @@ class TestDictSerialization(TestCase):
             'int_field': ValidationError('Test int_field')
         }
 
-        class MockSerializer(FieldSerializer):
-            def serialize_field(self, value, model_type, field_name, field, **kwargs):
+        class MockSerializer(DictModelSerializer):
+            def serialize_value(self, value, value_type, field=None, **kwargs):
                 pass
 
-            def deserialize_field(self, value, model_type, field_name, field, **kwargs):
-                if field_name in err:
-                    raise err[field_name]
+            def deserialize_value(self, value, value_type, field=None, **kwargs):
+                if field and field.name in err:
+                    raise err[field.name]
                 return value
 
-        serializer = DictModelSerializer(MockSerializer())
+        serializer = MockSerializer()
         with self.assertRaises(ModelValidationError) as error:
             serializer.deserialize_model(serialized, TestModel)
         self.assertEqual(error.exception.sub_errors['string_field'].errors, [err['string_field']])
@@ -233,7 +331,7 @@ class TestDictSerialization(TestCase):
 
 class TestSerializationJson(TestCase):
     def setUp(self):
-        self.serializer = JsonModelSerializer(VerbatimFieldSerializer(), sort_keys=True)
+        self.serializer = JsonModelSerializer(sort_keys=True)
 
     def test_deserialization_json(self):
         deserialized = self.serializer.deserialize_model('''{

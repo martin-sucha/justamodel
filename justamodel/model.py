@@ -23,6 +23,7 @@ class Field:
         self.required = required
         self.default = default
         self.type = type
+        self.name = None
         self.extra_attributes = list(kwargs.keys())
         for name, value in kwargs.items():
             setattr(self, name, value)
@@ -59,6 +60,7 @@ class ModelMeta(type):
         new_namespace = {}
         for key, value in namespace.items():
             if isinstance(value, Field):
+                value.name = key
                 declared_fields[key] = value
             else:
                 new_namespace[key] = value
